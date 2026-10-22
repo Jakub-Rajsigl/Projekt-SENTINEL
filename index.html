@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SENTINEL — Real Vision & Text Reader</title>
+    <title>SENTINEL — Accurate Real-Time OCR</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,7 +11,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Tesseract.js pro reálné OCR čtení textu z kamery/fotek -->
+    <!-- Tesseract.js OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <!-- Google Fonts -->
@@ -35,27 +35,22 @@
         const { useState, useEffect, useRef } = React;
 
         function App() {
-            const [mode, setMode] = useState('CAMERA'); // CAMERA, FILE
+            const [mode, setMode] = useState('CAMERA');
             const [speechEnabled, setSpeechEnabled] = useState(true);
             const [isAnalyzing, setIsAnalyzing] = useState(false);
             const [isReading, setIsReading] = useState(false);
-            const [scannedText, setScannedText] = useState('Naměřte kameru na text nebo značku a stiskněte tlačítko SKENOVAT.');
-            const [statusText, setStatusText] = useState('Připraven k použití');
-            const [cameraActive, setCameraActive] = useState(false);
-
+            const [scannedText, setScannedText] = useState('Namiřte kameru přesně na text a stiskněte žluté tlačítko.');
+            const [statusText, setStatusText] = useState('Připraven');
+            
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const fileInputRef = useRef(null);
 
-            // Stop speech
             const stopSpeech = () => {
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
-                }
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
                 setIsReading(false);
             };
 
-            // Přečtení textu
             const speakText = (text) => {
                 if (!speechEnabled || !('speechSynthesis' in window) || !text) return;
                 stopSpeech();
@@ -84,101 +79,129 @@
                 });
             };
 
-            // Aktivace kamery mobilu
-            const startCamera = () => {
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            // Aktivace celé mobilní kamery
+            useEffect(() => {
+                if (mode === 'CAMERA' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: { ideal: "environment" } } 
+                        video: { 
+                            facingMode: { ideal: "environment" },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        } 
                     })
                     .then(stream => {
                         if (videoRef.current) {
                             videoRef.current.srcObject = stream;
-                            setCameraActive(true);
                         }
                     })
                     .catch(err => {
-                        console.error("Kamera nedostupná", err);
-                        setStatusText("Kamera nedostupná - povolte přístup");
-                        setCameraActive(false);
+                        setStatusText("Chyba kamery");
                     });
-                }
-            };
-
-            useEffect(() => {
-                if (mode === 'CAMERA') {
-                    startCamera();
                 }
             }, [mode]);
 
-            // SKUTEČNÉ SKENOVÁNÍ Z KAMERY
+            // Vyčištění nesmyslných znaků z OCR výstupu
+            const cleanText = (rawText) => {
+                return rawText
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => {
+                        // Odstranit řádky, které obsahují jen náhodné šumy a divné znaky
+                        const validChars = line.replace(/[^a-zA-AáeíóúůýčďěňřšťžÁÉÍÓÚŮÝČĎĚŇŘŠŤŽ0-9\s]/g, '');
+                        return validChars.length > 2;
+                    })
+                    .join('\n')
+                    .replace(/\s+/g, ' ');
+            };
+
+            // Úprava fotky pro vysokou přesnost (Zvýšení kontrastu)
+            const preprocessImage = (canvas, ctx, video) => {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+
+                // Vykreslení
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Černobílý filtr & úprava kontrastu pro čisté čtení
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                    // Prahování - převede na ostrý text bez stínů
+                    const threshold = avg > 110 ? 255 : 0;
+                    data[i] = threshold;
+                    data[i + 1] = threshold;
+                    data[i + 2] = threshold;
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+            };
+
+            // Skenování z kamery
             const scanCameraText = async () => {
                 if (!videoRef.current || isAnalyzing) return;
 
                 setIsAnalyzing(true);
-                setStatusText("Skenuji obraz z kamery...");
-                speakText("Probíhá skenování textu...");
+                setStatusText("Zpracovávám obraz...");
+                speakText("Skenuji text...");
 
                 const video = videoRef.current;
                 const canvas = canvasRef.current;
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
-                
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Úprava obrazu
+                preprocessImage(canvas, ctx, video);
 
                 try {
-                    // Tesseract OCR rozpoznávání textu z fotky
-                    const result = await Tesseract.recognize(canvas, 'ces+eng');
-                    const foundText = result.data.text.trim();
+                    const result = await Tesseract.recognize(canvas, 'ces+eng', {
+                        tessedit_char_whitelist: '0123456789aábcčdďeéěfghiíjklmnňoópqrřsštťuúůvwxyýzžAÁBCČDĎEÉĚFGHIÍJKLMNŇOÓPQRŘSŠTŤUÚŮVWXYÝZŽ.,!?:- '
+                    });
+                    
+                    const cleaned = cleanText(result.data.text);
 
                     setIsAnalyzing(false);
-                    if (foundText.length > 2) {
-                        setScannedText(foundText);
-                        setStatusText("Text úspešně naskenován!");
-                        speakText(`Naskenovaný text: ${foundText}`);
+                    if (cleaned.length > 2) {
+                        setScannedText(cleaned);
+                        setStatusText("Naskenováno přesně");
+                        speakText(cleaned);
                     } else {
-                        setScannedText("Nebyly nalezeny žádné čitelné nápisy. Zkuste přiblížit nebo lépe posvítit.");
-                        setStatusText("Nenalezen žádný text");
-                        speakText("Na snímku se nepodařilo přečíst žádný text.");
+                        setScannedText("Text nebyl rozpoznán. Zkuste podržet telefon v klidu a namířit blíž na nápis.");
+                        setStatusText("Nenalezen čistý text");
+                        speakText("Text se nepodařilo přečíst. Zkuste namířit blíž.");
                     }
                 } catch (e) {
                     setIsAnalyzing(false);
-                    setStatusText("Chyba při skenování");
-                    speakText("Chyba při zpracování obrazu.");
+                    setStatusText("Chyba čtení");
                 }
             };
 
-            // SKUTEČNÉ ČTENÍ ZE SOUBORU (.txt, .md, fotka)
+            // Nahrání ze souboru / fotky
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
                 setIsAnalyzing(true);
                 stopSpeech();
-                setStatusText(`Nahrávám: ${file.name}`);
 
-                // Pokud jde o fotku
                 if (file.type.startsWith('image/')) {
-                    speakText("Zpracovávám text z obrázku...");
+                    speakText("Zpracovávám obrázek...");
                     Tesseract.recognize(file, 'ces+eng').then(result => {
                         setIsAnalyzing(false);
-                        const text = result.data.text.trim();
-                        if (text) {
-                            setScannedText(text);
-                            speakText(`Text z fotky: ${text}`);
+                        const cleaned = cleanText(result.data.text);
+                        if (cleaned) {
+                            setScannedText(cleaned);
+                            speakText(cleaned);
                         } else {
-                            setScannedText("Z fotky se nepodařilo přečíst text.");
-                            speakText("Z fotky se nepodařilo přečíst text.");
+                            setScannedText("Nepodařilo se přečíst text z fotky.");
                         }
                     });
                 } else {
-                    // Pokud jde o textový soubor
                     const reader = new FileReader();
                     reader.onload = (event) => {
                         setIsAnalyzing(false);
                         const text = event.target.result;
                         setScannedText(text || "Soubor je prázdný.");
-                        setStatusText("Soubor načten");
                         speakText(text);
                     };
                     reader.readAsText(file);
@@ -188,7 +211,6 @@
             return (
                 <div className="w-full max-w-4xl mx-auto min-h-screen flex flex-col justify-between space-y-4">
                     
-                    {/* Skrytý canvas pro zachycení fotky */}
                     <canvas ref={canvasRef} className="hidden"></canvas>
 
                     {/* Hlavička */}
@@ -198,7 +220,7 @@
                                 👁️
                             </div>
                             <div>
-                                <h1 className="text-xl font-black text-white leading-tight">SENTINEL REAL-OCR</h1>
+                                <h1 className="text-xl font-black text-white leading-tight">SENTINEL OCR</h1>
                                 <p className="text-[10px] text-yellow-400 font-mono">{statusText}</p>
                             </div>
                         </div>
@@ -223,19 +245,25 @@
                             onClick={() => { stopSpeech(); setMode('FILE'); }}
                             className={`p-3 rounded-xl font-bold text-xs border-2 ${mode === 'FILE' ? 'bg-yellow-400 text-black border-white' : 'bg-gray-900 text-white border-gray-800'}`}
                         >
-                            📂 NAHRÁT SOUBOR / FOTKU
+                            📂 NAHRÁT FOTKU / SOUBOR
                         </button>
                     </div>
 
                     {/* Hlavní okno */}
                     <main className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
                         
-                        {/* Vstupní oblast */}
-                        <div className="accessible-card rounded-2xl p-4 flex flex-col justify-between min-h-[250px]">
+                        {/* Kamera okno */}
+                        <div className="accessible-card rounded-2xl p-3 flex flex-col justify-between min-h-[250px]">
                             {mode === 'CAMERA' ? (
                                 <div className="flex flex-col justify-between h-full space-y-3">
-                                    <div className="relative rounded-xl overflow-hidden bg-slate-900 h-48 border border-sky-400">
-                                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                                    {/* Zobrazení celého neorezaného záběru */}
+                                    <div className="relative rounded-xl overflow-hidden bg-black h-52 border border-sky-400 flex items-center justify-center">
+                                        <video 
+                                            ref={videoRef} 
+                                            autoPlay 
+                                            playsInline 
+                                            className="w-full h-full object-contain" 
+                                        />
                                     </div>
 
                                     <button 
@@ -243,7 +271,7 @@
                                         disabled={isAnalyzing}
                                         className="w-full py-3.5 accessible-btn-yellow rounded-xl text-xs font-black shadow-lg"
                                     >
-                                        {isAnalyzing ? '⏳ REÁLNĚ SKENUJI TEXT...' : '📸 NASKENOVAT A PŘEČÍST REALITU'}
+                                        {isAnalyzing ? '⏳ ANALYZUJI KONTRAST...' : '📸 PŘEČÍST TEXT Z KAMERY'}
                                     </button>
                                 </div>
                             ) : (
@@ -263,19 +291,19 @@
                                         onClick={() => fileInputRef.current && fileInputRef.current.click()}
                                         className="py-3.5 px-4 accessible-btn-yellow rounded-xl text-xs font-black transition w-full"
                                     >
-                                        📂 VYBRAT FOTKU NEBO TEXT Z ZAŘÍZENÍ
+                                        📂 VYBRAT SOUBOR NEBO FOTKU
                                     </button>
                                 </div>
                             )}
                         </div>
 
-                        {/* Výstupní text a hlas */}
+                        {/* Výstupní text */}
                         <div className="accessible-card rounded-2xl p-4 flex flex-col justify-between border-2 border-yellow-400">
                             <div className="space-y-2">
                                 <span className="text-[10px] font-mono text-yellow-400 font-bold block border-b border-gray-800 pb-1">
-                                    NASKENOVANÝ OBSAH:
+                                    PŘEČTENÝ TEXT:
                                 </span>
-                                <div className="h-44 overflow-y-auto bg-black/70 p-3 rounded-xl border border-gray-800">
+                                <div className="h-44 overflow-y-auto bg-black/80 p-3 rounded-xl border border-gray-800">
                                     <p className="text-xs text-gray-100 font-medium leading-relaxed whitespace-pre-wrap">
                                         {scannedText}
                                     </p>
@@ -301,7 +329,7 @@
                     </main>
 
                     <footer className="accessible-card p-2 rounded-2xl text-center text-[10px] font-mono text-gray-400">
-                        SENTINEL 2026 // REAL-TIME OCR VISION
+                        SENTINEL 2026 // CLEAN ACCURATE OCR
                     </footer>
 
                 </div>
