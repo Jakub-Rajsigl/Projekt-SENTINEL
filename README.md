@@ -23,9 +23,6 @@ Primárně slouží k odstranění jazykových i fyzických bariér — ať už 
 
 * 🖼️ **OCR Optické Rozpoznávání Znaků:** Klientské skenování textu přímo z obrázků (`.png`, `.jpg`, `.jpeg`, `.webp`) pomocí Tesseract.js.
 * 🌐 **Inteligentní Překlad do Češtiny:** Automatický sémantický překlad jakéhokoliv ze 16 evropských jazyků do přirozené a plynulé češtiny.
-* 🔊 **Pokročilá Syntéza Hlasu (TTS):** 
-  * Výběr z nejlepších systémových lidských hlasů (`Microsoft Jakub Natural`, `Google Čeština` atd.).
-  * Možnost integrace **ElevenLabs API** pro ultra-realistický studiový dabing.
   * Okamžité zastavení čtení na jedno kliknutí.
 * 🎨 **Cyber-Glassmorphism Design:** Futuristické, responzivní a plynule animované uživatelské rozhraní inspirované moderními tech produkty.
 * 🌍 **Podpora 16 Evropských Jazyků:** Včetně přehledné grafické mřížky s ikonami vlajek jednotlivých států.
