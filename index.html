@@ -1,76 +1,210 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="cs" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SENTINEL — Ultra Document Reader & Translator</title>
+    <title>SENTINEL — AI Vision & Image Reader</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            blue: '#00f0ff',
+                            green: '#10b981',
+                            dark: '#030712'
+                        }
+                    },
+                    fontFamily: {
+                        heading: ['Space Grotesk', 'sans-serif'],
+                        main: ['Outfit', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
     <!-- React & ReactDOM CDN -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Tesseract.js pro OCR -->
+    
+    <!-- Tesseract.js pro OCR z obrázků -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
     
     <style>
         * { -webkit-tap-highlight-color: transparent; }
         body { 
-            font-family: 'Inter', sans-serif; 
-            background: #090d16; 
-            color: #f3f4f6; 
+            font-family: 'Outfit', sans-serif; 
+            background-color: #030712; 
+            color: #ffffff; 
             min-height: 100vh;
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.12) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.12) 0px, transparent 50%);
+            overflow-x: hidden;
         }
-        .font-heading { font-family: 'Space Grotesk', sans-serif; }
+
+        .cyber-glow-blue {
+            box-shadow: 0 0 30px -5px rgba(0, 240, 255, 0.25);
+        }
+        .cyber-glow-green {
+            box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.25);
+        }
+        
+        .text-cyber-gradient {
+            background: linear-gradient(135deg, #ffffff 0%, #00f0ff 50%, #10b981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
         .glass-panel { 
-            background: rgba(15, 23, 42, 0.75); 
-            backdrop-filter: blur(16px); 
+            background: rgba(10, 15, 29, 0.8); 
+            backdrop-filter: blur(20px); 
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08); 
         }
-        .glass-panel-glow {
-            box-shadow: 0 0 25px -5px rgba(56, 189, 248, 0.15);
-        }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.4); }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #10b981; border-radius: 4px; }
     </style>
 </head>
-<body class="p-3 sm:p-6 flex flex-col justify-between">
+<body class="selection:bg-emerald-500 selection:text-black">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useRef, useEffect } = React;
 
+        // SEZNAM PODPOROVANÝCH JAZYKŮ S OBRÁZKOVÝMI IKONAMI VLAJEK
+        const SUPPORTED_LANGUAGES = [
+            { flagUrl: 'https://flagcdn.com/w40/cz.png', name: 'Čeština', code: 'ces' },
+            { flagUrl: 'https://flagcdn.com/w40/gb.png', name: 'Angličtina', code: 'eng' },
+            { flagUrl: 'https://flagcdn.com/w40/de.png', name: 'Němčina', code: 'deu' },
+            { flagUrl: 'https://flagcdn.com/w40/fr.png', name: 'Francouzština', code: 'fra' },
+            { flagUrl: 'https://flagcdn.com/w40/es.png', name: 'Španělština', code: 'spa' },
+            { flagUrl: 'https://flagcdn.com/w40/it.png', name: 'Italština', code: 'ita' },
+            { flagUrl: 'https://flagcdn.com/w40/pl.png', name: 'Polština', code: 'pol' },
+            { flagUrl: 'https://flagcdn.com/w40/sk.png', name: 'Slovenština', code: 'slk' },
+            { flagUrl: 'https://flagcdn.com/w40/pt.png', name: 'Portugalština', code: 'por' },
+            { flagUrl: 'https://flagcdn.com/w40/nl.png', name: 'Nizozemština', code: 'nld' },
+            { flagUrl: 'https://flagcdn.com/w40/hu.png', name: 'Maďarština', code: 'hun' },
+            { flagUrl: 'https://flagcdn.com/w40/ro.png', name: 'Rumunština', code: 'ron' },
+            { flagUrl: 'https://flagcdn.com/w40/se.png', name: 'Švédština', code: 'swe' },
+            { flagUrl: 'https://flagcdn.com/w40/dk.png', name: 'Dánština', code: 'dan' },
+            { flagUrl: 'https://flagcdn.com/w40/no.png', name: 'Norština', code: 'nor' },
+            { flagUrl: 'https://flagcdn.com/w40/fi.png', name: 'Finština', code: 'fin' }
+        ];
+
+        function BackgroundCanvas() {
+            const canvasRef = useRef(null);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                let animationFrameId;
+
+                const resizeCanvas = () => {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                };
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+
+                const particles = Array.from({ length: 40 }, () => ({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 2 + 0.5,
+                    color: Math.random() > 0.5 ? '#00f0ff' : '#10b981',
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: (Math.random() - 0.5) * 0.3,
+                    alpha: Math.random() * 0.5 + 0.2
+                }));
+
+                const render = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    particles.forEach(p => {
+                        p.x += p.vx;
+                        p.y += p.vy;
+
+                        if (p.x < 0) p.x = canvas.width;
+                        if (p.x > canvas.width) p.x = 0;
+                        if (p.y < 0) p.y = canvas.height;
+                        if (p.y > canvas.height) p.y = 0;
+
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = p.alpha;
+                        ctx.fill();
+                    });
+
+                    animationFrameId = requestAnimationFrame(render);
+                };
+                render();
+
+                return () => {
+                    window.removeEventListener('resize', resizeCanvas);
+                    cancelAnimationFrame(animationFrameId);
+                };
+            }, []);
+
+            return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0 opacity-40" />;
+        }
+
         function App() {
+            const [booting, setBooting] = useState(true);
+            const [bootProgress, setBootProgress] = useState(0);
+            
             const [speechEnabled, setSpeechEnabled] = useState(true);
-            const [translateToCzech, setTranslateToCzech] = useState(true);
             const [isLoading, setIsLoading] = useState(false);
             const [isReading, setIsReading] = useState(false);
             const [fileName, setFileName] = useState('');
             const [originalText, setOriginalText] = useState('');
             const [translatedText, setTranslatedText] = useState('');
-            const [statusText, setStatusText] = useState('Připraven k načtení dokumentu');
+            const [statusText, setStatusText] = useState('Připraven k použití');
             const [isDragging, setIsDragging] = useState(false);
 
             const fileInputRef = useRef(null);
+            const speechEnabledRef = useRef(speechEnabled);
+
+            useEffect(() => {
+                speechEnabledRef.current = speechEnabled;
+                if (!speechEnabled) {
+                    stopSpeech();
+                }
+            }, [speechEnabled]);
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setBootProgress(prev => {
+                        if (prev >= 100) {
+                            clearInterval(interval);
+                            setTimeout(() => setBooting(false), 300);
+                            return 100;
+                        }
+                        return prev + 5;
+                    });
+                }, 30);
+                return () => clearInterval(interval);
+            }, []);
 
             const stopSpeech = () => {
-                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                }
                 setIsReading(false);
             };
 
-            const speakText = (text) => {
-                if (!speechEnabled || !('speechSynthesis' in window) || !text) return;
+            const speakTextInCzech = (text) => {
+                if (!speechEnabledRef.current || !('speechSynthesis' in window) || !text) return;
                 stopSpeech();
                 setIsReading(true);
 
@@ -87,7 +221,14 @@
                 sentences.forEach((sentence, index) => {
                     const utterance = new SpeechSynthesisUtterance(sentence);
                     utterance.lang = 'cs-CZ';
-                    utterance.rate = 1.0;
+                    utterance.rate = 0.95;
+
+                    utterance.onstart = () => {
+                        if (!speechEnabledRef.current) {
+                            window.speechSynthesis.cancel();
+                            setIsReading(false);
+                        }
+                    };
 
                     if (index === sentences.length - 1) {
                         utterance.onend = () => setIsReading(false);
@@ -98,39 +239,62 @@
                 });
             };
 
-            // SPOLEHLIVÝ PŘEKLAD CEZ GOOGLE TRANSLATE API (BEZ LIMITU A VŠECHNY JAZYKY)
-            const translateText = async (text) => {
-                if (!translateToCzech || text.trim().length === 0) return text;
+            const refineCzechText = (rawTranslation) => {
+                let text = rawTranslation;
+                const replacements = [
+                    [/\bje tam\b/gi, 'se nachází'],
+                    [/\bona je\b/gi, 'je'],
+                    [/\bon je\b/gi, 'je'],
+                    [/\bto je\b/gi, 'je'],
+                    [/\bv jejím\b/gi, 'v její'],
+                    [/\bv jeho\b/gi, 'v jeho']
+                ];
+                replacements.forEach(([pattern, replacement]) => {
+                    text = text.replace(pattern, replacement);
+                });
+                return text.replace(/\s+/g, ' ').replace(/\s+([.,!?])/g, '$1').trim();
+            };
 
-                setStatusText("Překládám obsah do češtiny...");
+            const translateTextToCzech = async (text) => {
+                if (!text || text.trim().length === 0) return text;
+                setStatusText("Překládám do češtiny...");
 
                 try {
-                    // Primární spolehlivé rozhraní Google Translate Engine
                     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=cs&dt=t&q=${encodeURIComponent(text)}`;
                     const res = await fetch(url);
                     const data = await res.json();
 
                     if (data && data[0]) {
-                        // Spojení všech přeložených vět dohromady
-                        const translated = data[0].map(item => item[0]).filter(Boolean).join('');
-                        if (translated && translated.trim().length > 0) {
-                            return translated;
+                        const rawTranslated = data[0].map(item => item[0]).filter(Boolean).join('');
+                        if (rawTranslated && rawTranslated.trim().length > 0) {
+                            return refineCzechText(rawTranslated);
                         }
                     }
                 } catch (e) {
-                    console.error("Chyba primárního překladače, zkouším záložní...", e);
+                    console.error("Primární překladatel selhal:", e);
                 }
 
-                // Záložní rozhraní
                 try {
-                    const fallbackUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 450))}&langpair=autodetect|cs`;
-                    const res = await fetch(fallbackUrl);
-                    const data = await res.json();
-                    if (data && data.responseData && data.responseData.translatedText) {
-                        return data.responseData.translatedText;
+                    const sentences = text.split(/(?<=[.!?\n])\s+/);
+                    const translatedSentences = [];
+
+                    for (let sentence of sentences) {
+                        if (sentence.trim().length === 0) continue;
+                        const fallbackUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(sentence)}&langpair=autodetect|cs`;
+                        const res = await fetch(fallbackUrl);
+                        const data = await res.json();
+                        if (data && data.responseData && data.responseData.translatedText) {
+                            translatedSentences.push(data.responseData.translatedText);
+                        } else {
+                            translatedSentences.push(sentence);
+                        }
+                    }
+
+                    if (translatedSentences.length > 0) {
+                        return refineCzechText(translatedSentences.join(' '));
                     }
                 } catch (e) {
-                    console.error("Záložní překlad selhal", e);
+                    console.error("Záložní překladatel selhal:", e);
                 }
 
                 return text;
@@ -139,52 +303,35 @@
             const processFile = (file) => {
                 if (!file) return;
 
+                if (!file.type.startsWith('image/')) {
+                    setStatusText("Vyberte prosím obrázek nebo fotku!");
+                    return;
+                }
+
                 stopSpeech();
                 setIsLoading(true);
                 setFileName(file.name);
-                setStatusText(`Načítám: ${file.name}`);
+                setStatusText(`Zpracovávám obrázek: ${file.name}`);
 
-                if (file.type.startsWith('image/')) {
-                    Tesseract.recognize(file, 'ces+eng+spa+deu+fra').then(async result => {
-                        const extracted = result.data.text.trim();
-                        if (extracted.length > 0) {
-                            setOriginalText(extracted);
-                            const translated = await translateText(extracted);
-                            setTranslatedText(translated);
-                            setIsLoading(false);
-                            setStatusText("Dokument úspěšně zpracován a přeložen!");
-                            speakText(translateToCzech ? translated : extracted);
-                        } else {
-                            setIsLoading(false);
-                            setOriginalText("Z fotky se nepodařilo přečíst žádný text.");
-                            setTranslatedText("Z fotky se nepodařilo přečíst žádný text.");
-                            setStatusText("Text nenalezen");
-                        }
-                    });
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = async (event) => {
-                        const content = event.target.result;
-                        if (content && content.trim().length > 0) {
-                            setOriginalText(content);
-                            const translated = await translateText(content);
-                            setTranslatedText(translated);
-                            setIsLoading(false);
-                            setStatusText("Soubor úspěšně přeložen!");
-                            speakText(translateToCzech ? translated : content);
-                        } else {
-                            setIsLoading(false);
-                            setOriginalText("Soubor je prázdný.");
-                            setTranslatedText("Soubor je prázdný.");
-                            setStatusText("Prázdný soubor");
-                        }
-                    };
-                    reader.onerror = () => {
+                Tesseract.recognize(file, 'ces+eng+spa+deu+fra+ita+por+nld+pol+slk+hun+ron+swe+dan+nor+fin').then(async result => {
+                    const extracted = result.data.text.trim();
+                    if (extracted.length > 0) {
+                        setOriginalText(extracted);
+                        const translated = await translateTextToCzech(extracted);
+                        setTranslatedText(translated);
                         setIsLoading(false);
-                        setStatusText("Chyba při čtení souboru");
-                    };
-                    reader.readAsText(file, "UTF-8");
-                }
+                        setStatusText("Obrázek úspěšně přeložen do češtiny");
+                        
+                        if (speechEnabledRef.current) {
+                            speakTextInCzech(translated);
+                        }
+                    } else {
+                        setIsLoading(false);
+                        setOriginalText("Z fotky se nepodařilo přečíst žádný text.");
+                        setTranslatedText("Z fotky se nepodařilo přečíst žádný text.");
+                        setStatusText("Text nenalezen");
+                    }
+                });
             };
 
             const handleDrop = (e) => {
@@ -197,191 +344,269 @@
 
             const copyToClipboard = (text) => {
                 navigator.clipboard.writeText(text);
-                setStatusText("Text zkopírován do schránky!");
+                setStatusText("Zkopírováno do schránky");
             };
 
-            return (
-                <div className="w-full max-w-6xl mx-auto min-h-[92vh] flex flex-col justify-between space-y-6">
-                    
-                    {/* TOP HEADER */}
-                    <header className="glass-panel p-4 sm:p-5 rounded-3xl flex flex-wrap justify-between items-center gap-4 glass-panel-glow">
-                        <div className="flex items-center gap-3.5">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-400 to-indigo-500 text-black flex items-center justify-center font-black shadow-lg shadow-sky-500/20">
-                                👁️
+            if (booting) {
+                return (
+                    <div className="fixed inset-0 bg-[#030712] z-50 flex flex-col items-center justify-center p-6 select-none font-mono">
+                        <div className="text-center space-y-6 max-w-sm w-full">
+                            <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-tr from-sky-400 to-emerald-400 p-0.5 cyber-glow-green">
+                                <div className="w-full h-full bg-[#030712] rounded-[14px] flex items-center justify-center text-3xl">
+                                    👁️
+                                </div>
                             </div>
+
                             <div>
-                                <h1 className="text-2xl font-extrabold font-heading tracking-tight bg-gradient-to-r from-white via-sky-100 to-sky-400 bg-clip-text text-transparent">
+                                <h1 className="text-3xl font-extrabold tracking-wider text-cyber-gradient font-heading">
                                     SENTINEL
                                 </h1>
-                                <p className="text-xs text-sky-400 font-medium flex items-center gap-1.5 mt-0.5">
-                                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                                <p className="text-xs text-emerald-400 tracking-wider uppercase mt-1">
+                                    AI Hlasový & Optický Asistent
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                                    <div 
+                                        className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-75"
+                                        style={{ width: `${bootProgress}%` }}
+                                    ></div>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-slate-500">
+                                    <span>Načítání modulů...</span>
+                                    <span>{bootProgress}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="relative z-10 w-full max-w-7xl mx-auto min-h-screen p-4 sm:p-8 flex flex-col justify-between space-y-8">
+                    <BackgroundCanvas />
+
+                    {/* HLAVIČKA */}
+                    <header className="glass-panel p-5 sm:p-6 rounded-3xl flex flex-wrap justify-between items-center gap-4 cyber-glow-blue">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-400 to-emerald-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                                <div className="w-full h-full bg-[#030712] rounded-[14px] flex items-center justify-center text-2xl">
+                                    👁️
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-black font-heading tracking-wider text-cyber-gradient">
+                                        SENTINEL
+                                    </h1>
+                                </div>
+                                <p className="text-xs text-slate-400 font-medium flex items-center gap-2 mt-0.5">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                     {statusText}
                                 </p>
                             </div>
                         </div>
 
-                        {/* OVLÁDACÍ TLAČÍTKA */}
-                        <div className="flex items-center gap-2.5">
-                            <button 
-                                onClick={async () => {
-                                    const nextState = !translateToCzech;
-                                    setTranslateToCzech(nextState);
-                                    if (originalText && !isLoading) {
-                                        if (nextState && (!translatedText || translatedText === originalText)) {
-                                            const newlyTranslated = await translateText(originalText);
-                                            setTranslatedText(newlyTranslated);
-                                            speakText(newlyTranslated);
-                                        } else {
-                                            speakText(nextState ? translatedText : originalText);
-                                        }
-                                    }
-                                }}
-                                className={`px-4 py-2.5 rounded-2xl font-semibold text-xs transition flex items-center gap-2 border ${
-                                    translateToCzech 
-                                        ? 'bg-sky-500/10 border-sky-400/40 text-sky-300 shadow-lg shadow-sky-500/10' 
-                                        : 'bg-slate-800/60 border-slate-700 text-slate-400'
-                                }`}
-                            >
-                                🌐 {translateToCzech ? 'Překlad do ČJ: ZAP' : 'Překlad: VYPNUT'}
-                            </button>
-
+                        {/* OVLÁDÁNÍ HLASU */}
+                        <div className="flex items-center gap-3">
                             <button 
                                 onClick={() => setSpeechEnabled(!speechEnabled)}
-                                className={`px-4 py-2.5 rounded-2xl font-semibold text-xs transition border ${
+                                className={`px-4 py-2.5 rounded-2xl font-bold text-xs transition-all border ${
                                     speechEnabled 
-                                        ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-400' 
-                                        : 'bg-slate-800/60 border-slate-700 text-slate-500'
+                                        ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-300' 
+                                        : 'bg-slate-900/80 border-slate-800 text-slate-500'
                                 }`}
                             >
-                                {speechEnabled ? '🔊 Hlas: ZAP' : '🔇 Hlas: VYP'}
+                                {speechEnabled ? '🔊 Hlasité Čtení: ZAP' : '🔇 Hlasité Čtení: VYP'}
                             </button>
                         </div>
                     </header>
 
-                    {/* DRAG & DROP NAHRÁVACÍ ZÓNA */}
+                    {/* OBLAST NAHRÁVÁNÍ OBRÁZKŮ */}
                     <section 
                         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                         onDragLeave={() => setIsDragging(false)}
                         onDrop={handleDrop}
-                        className={`glass-panel p-8 sm:p-10 rounded-3xl text-center border-2 border-dashed transition-all cursor-pointer relative overflow-hidden group ${
+                        className={`glass-panel p-10 sm:p-12 rounded-3xl text-center border-2 border-dashed transition-all cursor-pointer relative overflow-hidden group ${
                             isDragging 
-                                ? 'border-sky-400 bg-sky-500/10 scale-[0.99]' 
-                                : 'border-slate-700 hover:border-sky-400/50 hover:bg-slate-800/40'
+                                ? 'border-emerald-400 bg-emerald-500/10 scale-[0.995]' 
+                                : 'border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900/60'
                         }`}
                         onClick={() => fileInputRef.current && fileInputRef.current.click()}
                     >
                         <input 
                             type="file" 
                             ref={fileInputRef}
-                            accept=".txt,.md,.json,.csv,.png,.jpg,.jpeg"
+                            accept="image/png, image/jpeg, image/jpg, image/webp"
                             onChange={(e) => processFile(e.target.files[0])}
                             className="hidden"
                         />
 
-                        <div className="flex flex-col items-center justify-center space-y-3">
-                            <div className="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center text-sky-400 group-hover:scale-110 transition duration-300">
-                                📂
+                        <div className="flex flex-col items-center justify-center space-y-3 relative z-10">
+                            <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-3xl group-hover:scale-110 group-hover:border-emerald-500 transition duration-300">
+                                🖼️
                             </div>
+                            
                             <div>
-                                <h2 className="text-lg font-bold font-heading text-white">
-                                    Přetáhněte sem soubor neboli klikněte pro výběr
+                                <h2 className="text-xl font-bold font-heading text-white">
+                                    Vyberte nebo přetáhněte obrázek / fotku
                                 </h2>
                                 <p className="text-xs text-slate-400 mt-1">
-                                    Podporuje španělštinu, angličtinu, němčinu i další jazyky
+                                    Podporované formáty obrázků: .png, .jpg, .jpeg, .webp
                                 </p>
                             </div>
 
                             {isLoading && (
-                                <div className="mt-2 text-xs font-semibold text-sky-400 animate-pulse flex items-center gap-2">
-                                    ⏳ Překládám text do češtiny...
+                                <div className="mt-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs font-bold text-emerald-300 animate-pulse flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                                    Probíhá OCR skenování a překlad obrázku do češtiny...
                                 </div>
                             )}
                         </div>
                     </section>
 
-                    {/* DVOJICE TEXTOVÝCH PANELS */}
-                    <main className="grid grid-cols-1 md:grid-cols-2 gap-5 flex-1">
+                    {/* DVA PANELY: ORIGINÁL VS ČESKÝ PŘEKLAD */}
+                    <main className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
                         
-                        <div className="glass-panel rounded-3xl p-5 flex flex-col justify-between border border-slate-800">
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                                    <span className="text-xs font-semibold font-heading text-slate-400 flex items-center gap-2">
-                                        📄 PŮVODNÍ OBSAH DOKUMENTU
-                                    </span>
+                        {/* PŮVODNÍ TEXT */}
+                        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between border border-slate-800">
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                                        <h3 className="text-xs font-bold font-heading text-slate-300 tracking-wider uppercase">
+                                            Původní naskenovaný text
+                                        </h3>
+                                    </div>
                                     {originalText && (
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); copyToClipboard(originalText); }}
-                                            className="text-[11px] text-slate-400 hover:text-sky-400 font-medium transition"
+                                            className="text-xs text-slate-400 hover:text-emerald-400 font-semibold transition"
                                         >
-                                            📋 Zkopírovat
+                                            Zkopírovat
                                         </button>
                                     )}
                                 </div>
 
-                                <div className="h-60 overflow-y-auto custom-scrollbar bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
-                                    <p className="text-xs sm:text-sm text-slate-300 font-normal leading-relaxed whitespace-pre-wrap">
-                                        {originalText || 'Zde se zobrazí původní text...'}
+                                <div className="h-60 overflow-y-auto custom-scrollbar bg-slate-950/70 p-4 rounded-2xl border border-slate-900 text-slate-300">
+                                    <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap">
+                                        {originalText || 'Zde se zobrazí naskenovaný originální text z obrázku...'}
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="mt-3 pt-2 text-[11px] font-mono text-slate-500 flex justify-between">
+                            <div className="mt-3 pt-2 border-t border-slate-900 text-[11px] font-mono text-slate-500 flex justify-between">
                                 <span>Slova: {originalText ? originalText.trim().split(/\s+/).length : 0}</span>
                                 <span>Znaky: {originalText.length}</span>
                             </div>
                         </div>
 
-                        <div className="glass-panel rounded-3xl p-5 flex flex-col justify-between border border-sky-500/30 glass-panel-glow">
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                                    <span className="text-xs font-semibold font-heading text-sky-400 flex items-center gap-2">
-                                        🇨🇿 ČESKÝ PŘEKLAD (K HOTOVÉMU ČTENÍ)
-                                    </span>
+                        {/* ČESKÝ PŘEKLAD (K PŘEČTENÍ) */}
+                        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between border border-emerald-500/30 cyber-glow-green">
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        <h3 className="text-xs font-bold font-heading text-emerald-400 tracking-wider uppercase">
+                                            Český překlad (předčítání)
+                                        </h3>
+                                    </div>
                                     {translatedText && (
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); copyToClipboard(translatedText); }}
-                                            className="text-[11px] text-sky-400 hover:text-sky-300 font-medium transition"
+                                            className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition"
                                         >
-                                            📋 Zkopírovat
+                                            Zkopírovat
                                         </button>
                                     )}
                                 </div>
 
-                                <div className="h-60 overflow-y-auto custom-scrollbar bg-slate-950/80 p-4 rounded-2xl border border-sky-500/20">
-                                    <p className="text-xs sm:text-sm text-sky-100 font-medium leading-relaxed whitespace-pre-wrap">
+                                <div className="h-60 overflow-y-auto custom-scrollbar bg-slate-950/90 p-4 rounded-2xl border border-emerald-500/20 text-emerald-100">
+                                    <p className="text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap">
                                         {translatedText || 'Zde se zobrazí přeložený český text...'}
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3 mt-4">
-                                <button 
-                                    onClick={() => speakText(translateToCzech ? translatedText : originalText)}
-                                    disabled={isLoading || (!originalText && !translatedText)}
-                                    className={`py-3 px-4 rounded-2xl font-extrabold text-xs transition flex items-center justify-center gap-2 shadow-lg ${
-                                        isReading 
-                                            ? 'bg-amber-400 text-black shadow-amber-500/20 animate-pulse' 
-                                            : 'bg-gradient-to-r from-sky-400 to-blue-500 text-black hover:opacity-90 shadow-sky-500/20'
-                                    }`}
-                                >
-                                    {isReading ? '🔄 ČTE SE HLASITĚ...' : '🔊 PŘEČÍST HLASITĚ'}
-                                </button>
+                            {/* TLAČÍTKA PŘEČÍST / ZASTAVIT */}
+                            <div className="mt-4 space-y-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        onClick={() => speakTextInCzech(translatedText)}
+                                        disabled={isLoading || !translatedText}
+                                        className={`py-3.5 px-4 rounded-2xl font-black text-xs transition-all flex items-center justify-center gap-2 ${
+                                            isReading 
+                                                ? 'bg-amber-400 text-black shadow-lg shadow-amber-500/20' 
+                                                : 'bg-gradient-to-r from-sky-400 to-emerald-400 text-black hover:opacity-95 shadow-lg shadow-emerald-500/20'
+                                        }`}
+                                    >
+                                        {isReading ? '🔄 ČTE SE HLASITĚ...' : '🔊 PŘEČÍST HLASITĚ ČESKY'}
+                                    </button>
 
-                                <button 
-                                    onClick={stopSpeech}
-                                    className="py-3 px-4 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 font-extrabold text-xs rounded-2xl transition flex items-center justify-center gap-2"
-                                >
-                                    ⏹️ ZASTAVIT ČTENÍ
-                                </button>
+                                    <button 
+                                        onClick={stopSpeech}
+                                        className="py-3.5 px-4 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 font-extrabold text-xs rounded-2xl transition flex items-center justify-center gap-2"
+                                    >
+                                        ⏹️ ZASTAVIT
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
                     </main>
 
-                    <footer className="glass-panel p-3.5 rounded-2xl text-center text-xs text-slate-500 font-mono flex justify-between items-center px-6">
-                        <span>SENTINEL 2026 // ACCESSIBILITY & OCR</span>
-                        <span className="text-sky-400/80">MAIDAY SUSTAINABILITY PROJECT</span>
+                    {/* PATKA MAIDAY 2026 */}
+                    <footer className="glass-panel p-4 rounded-2xl text-center text-xs text-slate-400 font-medium flex flex-wrap justify-between items-center px-6 gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">SENTINEL</span>
+                            <span className="text-slate-600">|</span>
+                            <span>Aplikace pro zpřístupnění obrazů a textu zrakově postiženým</span>
+                        </div>
+
+                        <a 
+                            href="https://maiday.cz/studenti-soutez" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-semibold transition"
+                        >
+                            <span>Pro soutěž</span>
+                            <span className="font-bold text-emerald-400">MAIDAY 2026 ↗</span>
+                        </a>
                     </footer>
+
+                    {/* TABULKA PODPOROVANÝCH JAZYKŮ S SKUTEČNÝMI GRAFICKÝMI VLAJKAMI */}
+                    <section className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">🌐</span>
+                                <h3 className="text-xs font-bold font-heading text-slate-300 tracking-wider uppercase">
+                                    Podporované jazyky OCR skenování & překladu
+                                </h3>
+                            </div>
+                            <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold">
+                                16 Evropských jazyků
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 pt-1">
+                            {SUPPORTED_LANGUAGES.map((lang, index) => (
+                                <div 
+                                    key={index} 
+                                    className="bg-slate-950/80 border border-slate-800/80 hover:border-emerald-500/40 p-3 rounded-2xl text-center flex flex-col items-center justify-center space-y-2 transition-all duration-200 hover:-translate-y-0.5"
+                                >
+                                    <img 
+                                        src={lang.flagUrl} 
+                                        alt={lang.name} 
+                                        className="w-7 h-5 object-cover rounded shadow-sm border border-slate-700/50"
+                                    />
+                                    <span className="text-xs font-semibold text-slate-200">{lang.name}</span>
+                                    <span className="text-[10px] font-mono text-slate-500 uppercase">{lang.code}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
 
                 </div>
             );
